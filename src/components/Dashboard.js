@@ -17,10 +17,45 @@ const Dashboard = () => {
     const [closeModalData, setCloseModalData] = useState(null);
     const [detailsModalTask, setDetailsModalTask] = useState(null);
 
-    // Fetch initial data
+    // Fetch initial data and setup real-time subscriptions
     useEffect(() => {
         fetchData();
-        setupRealtimeSubscriptions();
+
+        // Subscribe to tasks changes
+        const tasksSubscription = supabase
+            .channel('tasks_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+                console.log('Task change:', payload);
+                if (payload.eventType === 'INSERT') {
+                    setTasks(prev => [payload.new, ...prev]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setTasks(prev => prev.map(t => t.id === payload.new.id ? payload.new : t));
+                } else if (payload.eventType === 'DELETE') {
+                    setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+                }
+            })
+            .subscribe();
+
+        // Subscribe to time_entries changes
+        const entriesSubscription = supabase
+            .channel('time_entries_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, (payload) => {
+                console.log('Time entry change:', payload);
+                if (payload.eventType === 'INSERT') {
+                    setTimeEntries(prev => [payload.new, ...prev]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setTimeEntries(prev => prev.map(e => e.id === payload.new.id ? payload.new : e));
+                } else if (payload.eventType === 'DELETE') {
+                    setTimeEntries(prev => prev.filter(e => e.id !== payload.old.id));
+                }
+            })
+            .subscribe();
+
+        // Cleanup subscriptions on unmount
+        return () => {
+            supabase.removeChannel(tasksSubscription);
+            supabase.removeChannel(entriesSubscription);
+        };
     }, []);
 
     const fetchData = async () => {
@@ -56,41 +91,6 @@ const Dashboard = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const setupRealtimeSubscriptions = () => {
-        // Subscribe to tasks changes
-        const tasksSubscription = supabase
-            .channel('tasks_changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
-                if (payload.eventType === 'INSERT') {
-                    setTasks(prev => [payload.new, ...prev]);
-                } else if (payload.eventType === 'UPDATE') {
-                    setTasks(prev => prev.map(t => t.id === payload.new.id ? payload.new : t));
-                } else if (payload.eventType === 'DELETE') {
-                    setTasks(prev => prev.filter(t => t.id !== payload.old.id));
-                }
-            })
-            .subscribe();
-
-        // Subscribe to time_entries changes
-        const entriesSubscription = supabase
-            .channel('time_entries_changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, (payload) => {
-                if (payload.eventType === 'INSERT') {
-                    setTimeEntries(prev => [payload.new, ...prev]);
-                } else if (payload.eventType === 'UPDATE') {
-                    setTimeEntries(prev => prev.map(e => e.id === payload.new.id ? payload.new : e));
-                } else if (payload.eventType === 'DELETE') {
-                    setTimeEntries(prev => prev.filter(e => e.id !== payload.old.id));
-                }
-            })
-            .subscribe();
-
-        return () => {
-            tasksSubscription.unsubscribe();
-            entriesSubscription.unsubscribe();
-        };
     };
 
     const handleCreateTask = async ({ title, description }) => {
@@ -238,8 +238,8 @@ const Dashboard = () => {
                             <button
                                 onClick={() => setActiveTab('open')}
                                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'open'
-                                        ? 'border-primary-500 text-primary-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    ? 'border-primary-500 text-primary-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 Open Tasks ({openTasks.length})
@@ -247,8 +247,8 @@ const Dashboard = () => {
                             <button
                                 onClick={() => setActiveTab('closed')}
                                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'closed'
-                                        ? 'border-primary-500 text-primary-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    ? 'border-primary-500 text-primary-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 Closed Tasks ({closedTasks.length})
