@@ -1,39 +1,18 @@
 import React, { useState } from 'react';
-import toast from 'react-hot-toast';
 
-const CloseTaskModal = ({ task, activeEntries, onClose, onCloseTask, onKeepOpen }) => {
+const CloseTaskModal = ({ task, onClose, onCloseTask, onKeepOpen }) => {
     const [loading, setLoading] = useState(false);
 
     const handleCloseTask = async () => {
-        // Check if there are other active entries
-        const otherActiveEntries = activeEntries.filter(entry => entry.task_id === task.id);
-
-        if (otherActiveEntries.length > 1) {
-            toast.error('Cannot close task: other users have active sessions');
-            return;
-        }
-
         setLoading(true);
-        try {
-            await onCloseTask();
-            onClose();
-        } catch (error) {
-            toast.error(error.message || 'Failed to close task');
-        } finally {
-            setLoading(false);
-        }
+        await onCloseTask();
+        setLoading(false);
     };
 
     const handleKeepOpen = async () => {
         setLoading(true);
-        try {
-            await onKeepOpen();
-            onClose();
-        } catch (error) {
-            toast.error(error.message || 'Failed to clock out');
-        } finally {
-            setLoading(false);
-        }
+        await onKeepOpen();
+        setLoading(false);
     };
 
     return (

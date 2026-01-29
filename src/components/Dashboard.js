@@ -107,13 +107,20 @@ const Dashboard = () => {
     };
 
     const handleClockIn = async (task) => {
-        // Check if user already has an active entry for this task
-        const existingEntry = timeEntries.find(
-            e => e.task_id === task.id && e.user_id === user.id && !e.end_time
+        // Check if ANY user has an active entry for this task (task exclusivity)
+        const anyActiveEntry = timeEntries.find(
+            e => e.task_id === task.id && !e.end_time
         );
 
-        if (existingEntry) {
-            toast.error('You already have an active session for this task');
+        if (anyActiveEntry) {
+            // Check if it's the current user
+            if (anyActiveEntry.user_id === user.id) {
+                toast.error('You already have an active session for this task');
+            } else {
+                // Another user is working on this task
+                const otherUser = profiles.find(p => p.id === anyActiveEntry.user_id);
+                toast.error(`This task is currently being worked on by ${otherUser?.email || 'another user'}`);
+            }
             return;
         }
 
@@ -142,26 +149,32 @@ const Dashboard = () => {
 
         const { task, entry } = closeModalData;
 
-        // End the time entry
-        const { error: entryError } = await supabase
-            .from('time_entries')
-            .update({ end_time: new Date().toISOString() })
-            .eq('id', entry.id);
+        try {
+            // End the time entry first
+            const { error: entryError } = await supabase
+                .from('time_entries')
+                .update({ end_time: new Date().toISOString() })
+                .eq('id', entry.id);
 
-        if (entryError) throw entryError;
+            if (entryError) throw entryError;
 
-        // Close the task
-        const { error: taskError } = await supabase
-            .from('tasks')
-            .update({
-                status: 'closed',
-                closed_at: new Date().toISOString()
-            })
-            .eq('id', task.id);
+            // Close the task
+            const { error: taskError } = await supabase
+                .from('tasks')
+                .update({
+                    status: 'closed',
+                    closed_at: new Date().toISOString()
+                })
+                .eq('id', task.id);
 
-        if (taskError) throw taskError;
+            if (taskError) throw taskError;
 
-        toast.success('Task closed successfully!');
+            toast.success('Task closed successfully!');
+            setCloseModalData(null); // Close the modal
+        } catch (error) {
+            toast.error('Failed to close task');
+            console.error(error);
+        }
     };
 
     const handleKeepOpen = async () => {
@@ -169,15 +182,21 @@ const Dashboard = () => {
 
         const { entry } = closeModalData;
 
-        // Just end the time entry
-        const { error } = await supabase
-            .from('time_entries')
-            .update({ end_time: new Date().toISOString() })
-            .eq('id', entry.id);
+        try {
+            // Just end the time entry
+            const { error } = await supabase
+                .from('time_entries')
+                .update({ end_time: new Date().toISOString() })
+                .eq('id', entry.id);
 
-        if (error) throw error;
+            if (error) throw error;
 
-        toast.success('Clocked out successfully!');
+            toast.success('Clocked out successfully!');
+            setCloseModalData(null); // Close the modal
+        } catch (error) {
+            toast.error('Failed to clock out');
+            console.error(error);
+        }
     };
 
     const handleSignOut = async () => {
@@ -300,7 +319,6 @@ const Dashboard = () => {
             {closeModalData && (
                 <CloseTaskModal
                     task={closeModalData.task}
-                    activeEntries={timeEntries.filter(e => !e.end_time)}
                     onClose={() => setCloseModalData(null)}
                     onCloseTask={handleCloseTask}
                     onKeepOpen={handleKeepOpen}
